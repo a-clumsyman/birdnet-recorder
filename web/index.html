@@ -1,0 +1,44 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bird ID</title>
+<style>
+body{font-family:system-ui;margin:0;background:#0f2a1d;color:#eaf5ee;text-align:center;padding:24px}
+button{font-size:20px;padding:18px 28px;border:0;border-radius:40px;background:#6fcf97;color:#06260f;font-weight:700}
+button.rec{background:#eb5757;color:#fff}
+li{background:#1b4a33;margin:8px 0;padding:12px;border-radius:12px;list-style:none;text-align:left}
+ul{padding:0}small{opacity:.7}
+</style></head><body>
+<h1>🐦 Bird ID</h1>
+<p>Tap, record 10 seconds of birdsong, get species.</p>
+<button id="b">Record 10s</button>
+<p id="s"></p><ul id="r"></ul>
+<small>Powered by BirdNET (CC BY-NC-SA 4.0 models)</small>
+<script>
+const API="__API__";
+const s=document.getElementById('s'),r=document.getElementById('r'),b=document.getElementById('b');
+let pos=null;
+b.onclick=async()=>{
+  r.innerHTML='';
+  try{
+    const st=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false}});
+    navigator.geolocation&&navigator.geolocation.getCurrentPosition(p=>pos=p.coords,()=>{});
+    const mr=new MediaRecorder(st),ch=[];
+    mr.ondataavailable=e=>ch.push(e.data);
+    mr.onstop=async()=>{
+      st.getTracks().forEach(t=>t.stop());b.classList.remove('rec');b.disabled=true;
+      s.textContent='Identifying... (first call may take up to a minute while the server wakes)';
+      const fd=new FormData();fd.append('file',new Blob(ch,{type:mr.mimeType}),'rec.'+(mr.mimeType.includes('mp4')?'mp4':'webm'));
+      if(pos){fd.append('lat',pos.latitude);fd.append('lon',pos.longitude)}
+      try{
+        const j=await (await fetch(API+'/identify',{method:'POST',body:fd})).json();
+        s.textContent=j.detections.length?'':'No birds detected. Try again closer.';
+        j.detections.forEach(d=>{const l=document.createElement('li');
+          l.innerHTML=`<b>${d.common_name}</b> <small><i>${d.scientific_name}</i></small><br>${Math.round(d.confidence*100)}%`;r.appendChild(l)});
+      }catch(e){s.textContent='Error: '+e}
+      b.disabled=false;b.textContent='Record 10s';
+    };
+    mr.start();b.classList.add('rec');
+    let n=10;const t=setInterval(()=>{b.textContent='Recording '+n+'s';if(n--<=0){clearInterval(t);mr.stop()}},1000);
+  }catch(e){s.textContent='Mic blocked: '+e.message}
+};
+</script></body></html>
